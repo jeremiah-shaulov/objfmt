@@ -5,7 +5,7 @@ Includes class names together with object literals, and converts `Date` objects 
 ## Usage:
 
 ```ts
-import {objfmt, IndentStyle} from './mod.ts';
+import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.1/mod.ts';
 
 const value =
 [	{	name: 'Product 1',
