@@ -5,7 +5,7 @@ Includes class names together with object literals, and converts `Date` objects 
 ## Usage:
 
 ```ts
-import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.2/mod.ts';
+import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.3/mod.ts';
 
 const value =
 [	{	name: 'Product 1',
@@ -40,8 +40,9 @@ console.log(objfmt(value, {indentStyle: IndentStyle.Horstmann}));
 function objfmt(value: unknown, options?: Options, indentAll: number|string='', copyKeysOrderFrom?: unknown): string;
 
 interface Options
-{	indentWidth?: number,
+{	indentWidth?: number|string,
 	indentStyle?: IndentStyle,
+	preferLineWidthLimit?: number,
 }
 
 const enum IndentStyle
@@ -54,8 +55,9 @@ const enum IndentStyle
 Arguments:
 
 - `value` - a JavaScript value (object, array or other) to format.
-- `options` - allows to specify `indentWidth` and `indentStyle`
-	- `indentWidth` - `-1` for TAB indent, and from `0` to `10` (inclusive) for number of spaces. Default: `4`.
+- `options` - allows to specify `indentWidth`, `indentStyle` and `preferLineWidthLimit`.
+	- `indentWidth` - string (that consists of spaces and/or tabs) that will be used to indent each nesting level, or number of spaces (from `0` to `10`, -1 for TAB). Default: `4`.
 	- `indentStyle` - Style. Default: Kernighan & Ritchie.
-- `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output string, or number of spaces.
+	- `preferLineWidthLimit` - When printing arrays, print several numbers on line if the line remains not longer than this number. Default: `160`.
+- `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output, or number of spaces (from `0` to `10`, -1 for TAB). Default: empty string.
 - `copyKeysOrderFrom` - optional object or array, that will be traversed in parallel with the `value` object, to copy keys order from it. `copyKeysOrderFrom` can have some or all of the keys in `value`, and it can contain more keys. This allows to generate 2 stringified objects ready for line-to-line comparison.
