@@ -7,8 +7,11 @@ const RE_KEY = /^(?:\p{L}|_)(?:\p{L}|_|\d)*$/u;
 /**	Convert JavaScript value (object, array or other) to human-readable string similar to JSON with indentation.
 	Includes class names together with object literals, and converts `Date` objects to string representation.
  **/
-export function objfmt(value: unknown, options?: Options, indentAll='', copyKeysOrderFrom?: unknown)
-{	const serializer = new Serializer(options);
+export function objfmt(value: unknown, options?: Options, indentAll: number|string='', copyKeysOrderFrom?: unknown)
+{	if (typeof(indentAll) == 'number')
+	{	indentAll = indentAll>=0 && indentAll<=10 ? ' '.repeat(indentAll) : '\t';
+	}
+	const serializer = new Serializer(options);
 	objfmtWithSerializer(value, copyKeysOrderFrom, serializer, indentAll, -1, undefined);
 	return serializer+'';
 }
@@ -19,7 +22,7 @@ export interface Options
 	/**	`-1` for TAB indent, and from `0` to `10` (inclusive) for number of spaces.
 		Default: `4`.
 	 **/
-	indentWidth?: number,
+	indentWidth?: number|string,
 
 	/**	Style.
 		Default: Kernighan & Ritchie.
@@ -134,8 +137,8 @@ class Serializer
 	constructor(options?: Options)
 	{	const indentWidth = options?.indentWidth ?? 4;
 		this.indentStyle = options?.indentStyle ?? IndentStyle.KR;
-		this.addIndent = indentWidth>=0 && indentWidth<=10 ? ' '.repeat(indentWidth) : '\t';
-		this.addIndentShort = indentWidth<=0 || indentWidth>10 || this.indentStyle!=IndentStyle.Horstmann ? this.addIndent : this.addIndent.slice(0, -1);
+		this.addIndent = typeof(indentWidth)=='string' ? indentWidth : indentWidth>=0 && indentWidth<=10 ? ' '.repeat(indentWidth) : '\t';
+		this.addIndentShort = this.addIndent=='\t' || this.indentStyle!=IndentStyle.Horstmann ? this.addIndent : this.addIndent.slice(0, -1);
 	}
 
 	toString()
