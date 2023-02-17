@@ -5,7 +5,11 @@ Includes class names together with object literals, and converts `Date` objects 
 ## Usage:
 
 ```ts
-import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.3/mod.ts';
+// To download and run this example:
+// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.4/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example1.ts~)' > /tmp/example1.ts
+// deno run /tmp/example1.ts
+
+import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.4/mod.ts';
 
 const value =
 [	{	name: 'Product 1',

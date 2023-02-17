@@ -5,16 +5,19 @@ import {assertEquals} from "https://deno.land/std@0.176.0/testing/asserts.ts";
 // deno-lint-ignore no-explicit-any
 type Any = any;
 
+// deno-lint-ignore no-unused-vars
 class Class0
 {
 }
 
+// deno-lint-ignore no-unused-vars
 class Class1
 {	constructor(public prop0: string, public prop1: number)
 	{
 	}
 }
 
+// deno-lint-ignore no-unused-vars
 class CustomArray extends Array<Any> {}
 
 const TESTS =
@@ -195,6 +198,21 @@ undefined
 --- stringAllowApos=true, stringAllowBacktick=true
 
 'Quote is: "'
+
+--- preferLineWidthLimit=17, longStringAsObject=true
+
+{
+	str: "12345",
+}
+
+--- preferLineWidthLimit=17, longStringAsObject=true
+
+{
+-	str: "123456",
++	str: String {
++		123456
++	},
+}
 `;
 
 Deno.test

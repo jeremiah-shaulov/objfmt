@@ -2,6 +2,8 @@
 type Any = any;
 
 export const DEFAULT_PREFER_LINE_WIDTH_LIMIT = 160;
+const DEFAULT_INDENT_WIDTH = 4;
+const TAB_WIDTH = 4;
 const RE_SUBST_CHARS_IN_STRING_QT = /[\\\r\n\t"]|\p{C}/gu;
 const RE_SUBST_CHARS_IN_STRING_APOS = /[\\\r\n\t']|\p{C}/gu;
 const RE_SUBST_CHARS_IN_STRING_BACKTICK = /[\\\r\n\t`]|\p{C}|\$\{/gu;
@@ -25,7 +27,9 @@ export function objfmt(value: unknown, options?: Options, indentAll: number|stri
 	{	indentAll = indentAll>=0 && indentAll<=10 ? ' '.repeat(indentAll) : '\t';
 	}
 	const serializer = new Serializer(options);
-	objfmtWithSerializer(value, copyKeysOrderFrom, serializer, indentAll, -1, undefined);
+	const curIndentWidth = indentToWidth(indentAll);
+	const addIndentWidth = indentToWidth(options?.indentWidth ?? DEFAULT_INDENT_WIDTH);
+	objfmtWithSerializer(value, copyKeysOrderFrom, serializer, indentAll, curIndentWidth, addIndentWidth, -1, undefined);
 	return serializer+'';
 }
 
@@ -79,26 +83,27 @@ export const enum IndentStyle
 	Horstmann,
 }
 
-function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serializer: Serializer, indent: string, index: number, key: string|undefined)
+function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serializer: Serializer, curIndent: string, curIndentWidth: number, addIndentWidth: number, index: number, key: string|undefined)
 {	if (typeof(value)=='object' && value!=null && !(value instanceof Date))
 	{	const isArray = Array.isArray(value) || (value as Any).buffer instanceof ArrayBuffer;
 		const entries = isArray ? value as unknown[] : Object.keys(value);
 		const {length} = entries;
 		const className = value.constructor.name;
-		const nextIndent = serializer.begin(isArray, length, className, indent, index, key);
+		const nextIndent = serializer.begin(isArray, length, className, curIndent, index, key);
+		const nextIndentWidth = curIndentWidth + addIndentWidth;
 		if (isArray)
 		{	const fieldWidth = arrayFieldWidth(value as ArrayLike<unknown>);
 			if (fieldWidth >= 0)
-			{	serializer.arrayOfLimitedFields(entries, fieldWidth, nextIndent);
+			{	serializer.arrayOfLimitedFields(entries, fieldWidth, nextIndent, nextIndentWidth);
 			}
 			else if (Array.isArray(copyKeysOrderFrom))
 			{	for (let i=0; i<length; i++)
-				{	objfmtWithSerializer(entries[i], copyKeysOrderFrom[i], serializer, nextIndent, i, undefined);
+				{	objfmtWithSerializer(entries[i], copyKeysOrderFrom[i], serializer, nextIndent, nextIndentWidth, addIndentWidth, i, undefined);
 				}
 			}
 			else
 			{	for (let i=0; i<length; i++)
-				{	objfmtWithSerializer(entries[i], undefined, serializer, nextIndent, i, undefined);
+				{	objfmtWithSerializer(entries[i], undefined, serializer, nextIndent, nextIndentWidth, addIndentWidth, i, undefined);
 				}
 			}
 		}
@@ -121,20 +126,20 @@ function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serial
 				keys = keys2;
 				for (let i=0; i<length; i++)
 				{	const key = keys[i];
-					objfmtWithSerializer((value as Record<string, unknown>)[key], (copyKeysOrderFrom as Record<string, unknown>)[key], serializer, nextIndent, i, key);
+					objfmtWithSerializer((value as Record<string, unknown>)[key], (copyKeysOrderFrom as Record<string, unknown>)[key], serializer, nextIndent, nextIndentWidth, addIndentWidth, i, key);
 				}
 			}
 			else
 			{	for (let i=0; i<length; i++)
 				{	const key = keys[i];
-					objfmtWithSerializer((value as Record<string, unknown>)[key], undefined, serializer, nextIndent, i, key);
+					objfmtWithSerializer((value as Record<string, unknown>)[key], undefined, serializer, nextIndent, nextIndentWidth, addIndentWidth, i, key);
 				}
 			}
 		}
-		serializer.end(isArray, length, indent, index, key);
+		serializer.end(isArray, length, curIndent, index, key);
 	}
 	else
-	{	serializer.stringifyValue(value, indent, index, key);
+	{	serializer.stringifyValue(value, curIndent, curIndentWidth, index, key);
 	}
 }
 
@@ -161,7 +166,7 @@ class Serializer
 	protected result = '';
 
 	constructor(options?: Options)
-	{	const indentWidth = options?.indentWidth ?? 4;
+	{	const indentWidth = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
 		this.indentStyle = options?.indentStyle ?? IndentStyle.KR;
 		this.preferLineWidthLimit = options?.preferLineWidthLimit ?? DEFAULT_PREFER_LINE_WIDTH_LIMIT;
 		this.stringAllowApos = options?.stringAllowApos ?? false;
@@ -175,10 +180,10 @@ class Serializer
 	{	return this.result;
 	}
 
-	begin(isArray: boolean, length: number, className: string, indent: string, index: number, key: string|undefined)
+	begin(isArray: boolean, length: number, className: string, curIndent: string, index: number, key: string|undefined)
 	{	const wantClassName = className.length!=0 && className!='Object' && className!='Array';
 		if (length == 0)
-		{	this.#key(true, indent, index, key);
+		{	this.#key(true, curIndent, index, key);
 			if (wantClassName)
 			{	this.result += className+(isArray ? ' []' : ' {}');
 			}
@@ -187,7 +192,7 @@ class Serializer
 			}
 		}
 		else
-		{	this.#key(wantClassName, indent, index, key);
+		{	this.#key(wantClassName, curIndent, index, key);
 			if (wantClassName)
 			{	this.result += className;
 			}
@@ -195,14 +200,14 @@ class Serializer
 			switch (this.indentStyle)
 			{	case IndentStyle.Allman:
 					if (wantNewLine)
-					{	this.result += '\n'+indent;
+					{	this.result += '\n'+curIndent;
 					}
 					this.result += isArray ? '[' : '{';
-					this.result += '\n'+indent;
+					this.result += '\n'+curIndent;
 					break;
 				case IndentStyle.Horstmann:
 					if (wantNewLine)
-					{	this.result += '\n'+indent;
+					{	this.result += '\n'+curIndent;
 					}
 					this.result += isArray ? '[' : '{';
 					break;
@@ -211,48 +216,48 @@ class Serializer
 					{	this.result += ' ';
 					}
 					this.result += isArray ? '[' : '{';
-					this.result += '\n'+indent;
+					this.result += '\n'+curIndent;
 			}
-			indent += this.addIndent;
+			curIndent += this.addIndent;
 		}
-		return indent;
+		return curIndent;
 	}
 
-	end(isArray: boolean, length: number, indent: string, index: number, _key: string|undefined)
+	end(isArray: boolean, length: number, curIndent: string, index: number, _key: string|undefined)
 	{	if (length != 0)
-		{	this.result += isArray ? indent+']' : indent+'}';
+		{	this.result += isArray ? curIndent+']' : curIndent+'}';
 		}
 		if (index != -1)
 		{	this.result += ',\n';
 		}
 	}
 
-	stringifyValue(value: unknown, indent: string, index: number, key: string|undefined)
+	stringifyValue(value: unknown, curIndent: string, curIndentWidth: number, index: number, key: string|undefined)
 	{	// 1. Key and Value
 		if (typeof(value) == 'bigint')
-		{	this.#key(true, indent, index, key);
+		{	this.#key(true, curIndent, index, key);
 			this.result += value+'n';
 		}
 		else if (typeof(value) == 'string')
 		{	const str = this.#toStringLiteral(value);
-			if (!this.longStringAsObject || str.length<=this.preferLineWidthLimit)
-			{	this.#key(true, indent, index, key);
+			if (!this.longStringAsObject || curIndentWidth+str.length+(!key ? 0 : key.length+3)<=this.preferLineWidthLimit) // key.length + ': '.length + ','.length (here i ignore escape chars in `key`, and possible quote chars)
+			{	this.#key(true, curIndent, index, key);
 				this.result += str;
 			}
 			else
-			{	const nextIndent = this.begin(false, 1, 'String', indent, index, key);
-				this.#key(false, nextIndent, 0, undefined);
+			{	const nextIndent = this.begin(false, 1, 'String', curIndent, index, key);
+				this.#key(true, nextIndent, 0, undefined);
 				this.result += value+'\n';
-				this.end(false, 1, indent, index, key);
+				this.end(false, 1, curIndent, index, key);
 				index = -1;
 			}
 		}
 		else if (value instanceof Date)
-		{	this.#key(true, indent, index, key);
+		{	this.#key(true, curIndent, index, key);
 			this.result += `Date "${value}"`;
 		}
 		else
-		{	this.#key(true, indent, index, key);
+		{	this.#key(true, curIndent, index, key);
 			this.result += value;
 		}
 		// 2. Comma
@@ -261,14 +266,13 @@ class Serializer
 		}
 	}
 
-	arrayOfLimitedFields(entries: unknown[], fieldWidth: number, indent: string)
-	{	const indentWidth = indent.charCodeAt(0)==C_TAB ? 4*indent.length : indent.length;
-		let nFieldsOnLine = 1;
-		while (indentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.preferLineWidthLimit)
+	arrayOfLimitedFields(entries: unknown[], fieldWidth: number, curIndent: string, curIndentWidth: number)
+	{	let nFieldsOnLine = 1;
+		while (curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.preferLineWidthLimit)
 		{	nFieldsOnLine *= 2;
 		}
 		for (let i=0, iEnd=entries.length; i<iEnd; i++)
-		{	this.#key(true, indent, i, undefined);
+		{	this.#key(true, curIndent, i, undefined);
 			this.result += padStart(entries[i++], fieldWidth);
 			this.result += ',';
 			for (let j=1; j<nFieldsOnLine && i<iEnd; j++)
@@ -280,8 +284,8 @@ class Serializer
 		}
 	}
 
-	#key(withSpace: boolean, indent: string, index: number, key: string|undefined)
-	{	this.result += index!=0 ? indent : this.addIndentShort;
+	#key(withSpace: boolean, curIndent: string, index: number, key: string|undefined)
+	{	this.result += index!=0 ? curIndent : this.addIndentShort;
 		if (key != undefined)
 		{	this.result += RE_KEY.test(key) ? key : this.#toStringLiteral(key);
 			this.result += withSpace ? ': ' : ':';
@@ -393,4 +397,15 @@ function substCharsInString(str: string)
 	else
 	{	return Array.prototype.map.call(str, c => '\\u'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')).join('');
 	}
+}
+
+function indentToWidth(indent: number|string)
+{	if (typeof(indent) == 'number')
+	{	return indent>=0 && indent<=10 ? indent : TAB_WIDTH;
+	}
+	let nColumn = 0;
+	for (let i=0, iEnd=indent.length; i<iEnd; i++)
+	{	nColumn += indent.charCodeAt(i)==C_TAB ? TAB_WIDTH - nColumn%TAB_WIDTH : 1;
+	}
+	return nColumn;
 }
