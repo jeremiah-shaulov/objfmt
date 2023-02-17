@@ -1,6 +1,6 @@
 import {objfmt, IndentStyle, Options} from '../mod.ts';
 import {DEFAULT_PREFER_LINE_WIDTH_LIMIT} from '../private/objfmt.ts';
-import {assertEquals} from "https://deno.land/std@0.176.0/testing/asserts.ts";
+import {assertEquals} from "https://deno.land/std@0.177.0/testing/asserts.ts";
 
 // deno-lint-ignore no-explicit-any
 type Any = any;

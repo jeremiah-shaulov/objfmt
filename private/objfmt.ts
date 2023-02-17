@@ -66,6 +66,17 @@ export interface Options
 		Default: `false`.
 	 **/
 	longStringAsObject?: boolean;
+
+	/**	Print also non-enumerable object properties (that appear as such in `Object.getOwnPropertyDescriptors()`).
+		Default: `false`.
+	 **/
+	includeNonEnumerable?: boolean;
+
+	/**	By default, when serializing an object that has `toJSON()` method, the result of calling this method is serialized, instead of the object itself (as `JSON.stringify()` does).
+		This setting allows to avoid calling `toJSON()` at all (if set to `true`), or for certain class names.
+		Default: `false`.
+	 **/
+	noCallToJSON?: boolean | string[];
 }
 
 export const enum IndentStyle
@@ -85,11 +96,34 @@ export const enum IndentStyle
 }
 
 function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serializer: Serializer, curIndent: string, curIndentWidth: number, addIndentWidth: number, index: number, key: string|undefined)
-{	if (typeof(value)=='object' && value!=null && !(value instanceof Date))
+{	let className = '';
+	if (typeof(value)=='object' && value!=null)
+	{	// className
+		className = value.constructor.name;
+		if (className=='Object' || className=='Array')
+		{	className = '';
+		}
+		// call toJSON?
+		const {noCallToJSON} = serializer;
+		if (noCallToJSON!==true && 'toJSON' in value && typeof(value.toJSON)=='function')
+		{	if (typeof(noCallToJSON)=='boolean' || noCallToJSON.includes(className))
+			{	value = value.toJSON(key ?? index);
+			}
+		}
+		// convert Map to Object
+		if (value instanceof Map)
+		{	value = Object.fromEntries(value.entries());
+		}
+		else if (value instanceof Set)
+		{	value = [...value.keys()];
+		}
+	}
+	if (typeof(value)=='object' && value!=null && !(value instanceof Date))
 	{	const isArray = Array.isArray(value) || (value as Any).buffer instanceof ArrayBuffer;
-		const entries = isArray ? value as unknown[] : Object.keys(value);
+		const entries = isArray ? value as unknown[]
+			: serializer.includeNonEnumerable ? Object.getOwnPropertyNames(value)
+			: Object.keys(value);
 		const {length} = entries;
-		const className = value.constructor.name;
 		const nextIndent = serializer.begin(isArray, length, className, curIndent, index, key);
 		const nextIndentWidth = curIndentWidth + addIndentWidth;
 		if (isArray)
@@ -112,7 +146,7 @@ function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serial
 		{	let keys = entries as string[];
 			if (typeof(copyKeysOrderFrom)=='object' && copyKeysOrderFrom!=null)
 			{	const keys2 = [];
-				for (const k of Object.keys(copyKeysOrderFrom))
+				for (const k of serializer.includeNonEnumerable ? Object.getOwnPropertyNames(copyKeysOrderFrom) : Object.keys(copyKeysOrderFrom))
 				{	// deno-lint-ignore no-prototype-builtins
 					if (value.hasOwnProperty(k))
 					{	keys2[keys2.length] = k;
@@ -140,7 +174,7 @@ function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serial
 		serializer.end(isArray, length, curIndent, index, key);
 	}
 	else
-	{	serializer.stringifyValue(value, curIndent, curIndentWidth, index, key);
+	{	serializer.stringifyValue(value, curIndent, curIndentWidth, index, key, className);
 	}
 }
 
@@ -157,144 +191,150 @@ function padStart(value: unknown, fieldWidth: number)
 }
 
 class Serializer
-{	protected addIndent: string;
-	protected addIndentShort: string;
-	protected indentStyle: IndentStyle;
-	protected preferLineWidthLimit: number;
-	protected stringAllowApos: boolean;
-	protected stringAllowBacktick: boolean;
-	protected longStringAsObject: boolean;
-	protected result = '';
+{	includeNonEnumerable: boolean;
+	noCallToJSON: boolean | string[];
+	#addIndent: string;
+	#addIndentShort: string;
+	#indentStyle: IndentStyle;
+	#preferLineWidthLimit: number;
+	#stringAllowApos: boolean;
+	#stringAllowBacktick: boolean;
+	#longStringAsObject: boolean;
+	#result = '';
 
 	constructor(options?: Options)
 	{	const indentWidth = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
-		this.indentStyle = options?.indentStyle ?? IndentStyle.KR;
-		this.preferLineWidthLimit = options?.preferLineWidthLimit ?? DEFAULT_PREFER_LINE_WIDTH_LIMIT;
-		this.stringAllowApos = options?.stringAllowApos ?? false;
-		this.stringAllowBacktick = options?.stringAllowBacktick ?? false;
-		this.longStringAsObject = options?.longStringAsObject ?? false;
-		this.addIndent = typeof(indentWidth)=='string' ? indentWidth : indentWidth>=0 && indentWidth<=10 ? ' '.repeat(indentWidth) : '\t';
-		this.addIndentShort = this.addIndent=='\t' || this.indentStyle!=IndentStyle.Horstmann ? this.addIndent : this.addIndent.slice(0, -1);
+		this.includeNonEnumerable = options?.includeNonEnumerable ?? false;
+		this.noCallToJSON = options?.noCallToJSON ?? false;
+		this.#indentStyle = options?.indentStyle ?? IndentStyle.KR;
+		this.#preferLineWidthLimit = options?.preferLineWidthLimit ?? DEFAULT_PREFER_LINE_WIDTH_LIMIT;
+		this.#stringAllowApos = options?.stringAllowApos ?? false;
+		this.#stringAllowBacktick = options?.stringAllowBacktick ?? false;
+		this.#longStringAsObject = options?.longStringAsObject ?? false;
+		this.#addIndent = typeof(indentWidth)=='string' ? indentWidth : indentWidth>=0 && indentWidth<=10 ? ' '.repeat(indentWidth) : '\t';
+		this.#addIndentShort = this.#addIndent=='\t' || this.#indentStyle!=IndentStyle.Horstmann ? this.#addIndent : this.#addIndent.slice(0, -1);
 	}
 
 	toString()
-	{	return this.result;
+	{	return this.#result;
 	}
 
 	begin(isArray: boolean, length: number, className: string, curIndent: string, index: number, key: string|undefined)
-	{	const wantClassName = className.length!=0 && className!='Object' && className!='Array';
+	{	const wantClassName = className.length != 0;
 		if (length == 0)
 		{	this.#key(true, curIndent, index, key);
 			if (wantClassName)
-			{	this.result += className+(isArray ? ' []' : ' {}');
+			{	this.#result += className+(isArray ? ' []' : ' {}');
 			}
 			else
-			{	this.result += isArray ? '[]' : '{}';
+			{	this.#result += isArray ? '[]' : '{}';
 			}
 		}
 		else
 		{	this.#key(wantClassName, curIndent, index, key);
 			if (wantClassName)
-			{	this.result += className;
+			{	this.#result += className;
 			}
 			const wantNewLine = wantClassName || key!=undefined;
-			switch (this.indentStyle)
+			switch (this.#indentStyle)
 			{	case IndentStyle.Allman:
 					if (wantNewLine)
-					{	this.result += '\n'+curIndent;
+					{	this.#result += '\n'+curIndent;
 					}
-					this.result += isArray ? '[' : '{';
-					this.result += '\n'+curIndent;
+					this.#result += isArray ? '[' : '{';
+					this.#result += '\n'+curIndent;
 					break;
 				case IndentStyle.Horstmann:
 					if (wantNewLine)
-					{	this.result += '\n'+curIndent;
+					{	this.#result += '\n'+curIndent;
 					}
-					this.result += isArray ? '[' : '{';
+					this.#result += isArray ? '[' : '{';
 					break;
 				default:
 					if (wantNewLine)
-					{	this.result += ' ';
+					{	this.#result += ' ';
 					}
-					this.result += isArray ? '[' : '{';
-					this.result += '\n'+curIndent;
+					this.#result += isArray ? '[' : '{';
+					this.#result += '\n'+curIndent;
 			}
-			curIndent += this.addIndent;
+			curIndent += this.#addIndent;
 		}
 		return curIndent;
 	}
 
 	end(isArray: boolean, length: number, curIndent: string, index: number, _key: string|undefined)
 	{	if (length != 0)
-		{	this.result += isArray ? curIndent+']' : curIndent+'}';
+		{	this.#result += isArray ? curIndent+']' : curIndent+'}';
 		}
 		if (index != -1)
-		{	this.result += ',\n';
+		{	this.#result += ',\n';
 		}
 	}
 
-	stringifyValue(value: unknown, curIndent: string, curIndentWidth: number, index: number, key: string|undefined)
-	{	// 1. Key and Value
+	stringifyValue(value: unknown, curIndent: string, curIndentWidth: number, index: number, key: string|undefined, className: string)
+	{	if (className)
+		{	className += ' ';
+		}
+		// 1. Key and Value
 		if (typeof(value) == 'bigint')
 		{	this.#key(true, curIndent, index, key);
-			this.result += value+'n';
+			this.#result += className + value + 'n';
 		}
 		else if (typeof(value) == 'string')
 		{	const str = this.#toStringLiteral(value);
-			if (!this.longStringAsObject || curIndentWidth+str.length+(!key ? 0 : key.length+3)<=this.preferLineWidthLimit) // key.length + ': '.length + ','.length (here i ignore escape chars in `key`, and possible quote chars)
+			if (!this.#longStringAsObject || curIndentWidth+str.length+(!key ? 0 : key.length+3)<=this.#preferLineWidthLimit) // key.length + ': '.length + ','.length (here i ignore escape chars in `key`, and possible quote chars)
 			{	this.#key(true, curIndent, index, key);
-				this.result += str;
+				this.#result += className + str;
 			}
 			else
-			{	const nextIndent = this.begin(false, 1, 'String', curIndent, index, key);
+			{	const nextIndent = this.begin(false, 1, className+'String', curIndent, index, key);
 				this.#key(true, nextIndent, 0, undefined);
-				this.result += value.replace(RE_ENDL, m => m+nextIndent)+'\n';
+				this.#result += value.replace(RE_ENDL, m => m+nextIndent)+'\n';
 				this.end(false, 1, curIndent, index, key);
 				index = -1;
 			}
 		}
-		else if (value instanceof Date)
-		{	this.#key(true, curIndent, index, key);
-			this.result += `Date "${value}"`;
-		}
 		else
-		{	this.#key(true, curIndent, index, key);
-			this.result += value;
+		{	if (typeof(value) == 'function')
+			{	value = 'Function';
+			}
+			this.#key(true, curIndent, index, key);
+			this.#result += className + value;
 		}
 		// 2. Comma
 		if (index != -1)
-		{	this.result += ',\n';
+		{	this.#result += ',\n';
 		}
 	}
 
 	arrayOfLimitedFields(entries: unknown[], fieldWidth: number, curIndent: string, curIndentWidth: number)
 	{	let nFieldsOnLine = 1;
-		while (curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.preferLineWidthLimit)
+		while (curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.#preferLineWidthLimit)
 		{	nFieldsOnLine *= 2;
 		}
 		for (let i=0, iEnd=entries.length; i<iEnd; i++)
 		{	this.#key(true, curIndent, i, undefined);
-			this.result += padStart(entries[i++], fieldWidth);
-			this.result += ',';
+			this.#result += padStart(entries[i++], fieldWidth);
+			this.#result += ',';
 			for (let j=1; j<nFieldsOnLine && i<iEnd; j++)
-			{	this.result += padStart(entries[i++], fieldWidth+2);
-				this.result += ',';
+			{	this.#result += padStart(entries[i++], fieldWidth+2);
+				this.#result += ',';
 			}
 			i--;
-			this.result += '\n';
+			this.#result += '\n';
 		}
 	}
 
 	#key(withSpace: boolean, curIndent: string, index: number, key: string|undefined)
-	{	this.result += index!=0 ? curIndent : this.addIndentShort;
+	{	this.#result += index!=0 ? curIndent : this.#addIndentShort;
 		if (key != undefined)
-		{	this.result += RE_KEY.test(key) ? key : this.#toStringLiteral(key);
-			this.result += withSpace ? ': ' : ':';
+		{	this.#result += RE_KEY.test(key) ? key : this.#toStringLiteral(key);
+			this.#result += withSpace ? ': ' : ':';
 		}
 	}
 
 	#toStringLiteral(value: string)
-	{	const qt = autoSelectQuoteChar(value, this.stringAllowApos, this.stringAllowBacktick);
+	{	const qt = autoSelectQuoteChar(value, this.#stringAllowApos, this.#stringAllowBacktick);
 		const str = value.replace(qt=='"' ? RE_SUBST_CHARS_IN_STRING_QT : qt=="'" ? RE_SUBST_CHARS_IN_STRING_APOS : RE_SUBST_CHARS_IN_STRING_BACKTICK, substCharsInString);
 		return `${qt}${str}${qt}`;
 	}

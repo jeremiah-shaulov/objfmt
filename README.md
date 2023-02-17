@@ -1,6 +1,11 @@
 # objfmt
 Convert JavaScript value (object, array or other) to human-readable string similar to JSON with indentation.
-Includes class names together with object literals, and converts `Date` objects to string representation.
+It's different from `JSON.stringify()` in several ways:
+
+1. It includes class name together with object literal.
+2. It also handles `undefined`, `BigInt`, `Map`, `Set` and typed arrays (like `Uint8Array`).
+3. By default it calls `toJSON()` on objects, as `JSON.stringify()` does, but it allows to avoid this.
+4. It has setting to include non-enumerable object properties.
 
 ## Usage:
 
@@ -50,6 +55,8 @@ interface Options
 	stringAllowApos?: boolean;
 	stringAllowBacktick?: boolean;
 	longStringAsObject?: boolean;
+	includeNonEnumerable?: boolean;
+	noCallToJSON?: boolean | string[];
 }
 
 const enum IndentStyle
@@ -69,5 +76,7 @@ Arguments:
 	- `stringAllowApos` - Quote string literals also with apostrophes, if it requires less escaping. Default: `false`.
 	- `stringAllowBacktick` - Quote string literals also with backticks, if it requires less escaping. Default: `false`.
 	- `longStringAsObject` - Print long strings as multiline `String {... text ...}`, instead of string literals. Default: `false`.
+	- `includeNonEnumerable` - Print also non-enumerable object properties (that appear as such in `Object.getOwnPropertyDescriptors()`). Default: `false`.
+	- `noCallToJSON` - By default, when serializing an object that has `toJSON()` method, the result of calling this method is serialized, instead of the object itself (as `JSON.stringify()` does). This setting allows to avoid calling `toJSON()` at all (if set to `true`), or for certain class names. Default: `false`.
 - `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output, or number of spaces (from `0` to `10`, -1 for TAB). Default: empty string.
 - `copyKeysOrderFrom` - optional object or array, that will be traversed in parallel with the `value` object, to copy keys order from it. `copyKeysOrderFrom` can have some or all of the keys in `value`, and it can contain more keys. This allows to generate 2 stringified objects ready for line-to-line comparison.
