@@ -8,6 +8,7 @@ const RE_SUBST_CHARS_IN_STRING_QT = /[\\\r\n\t"]|\p{C}/gu;
 const RE_SUBST_CHARS_IN_STRING_APOS = /[\\\r\n\t']|\p{C}/gu;
 const RE_SUBST_CHARS_IN_STRING_BACKTICK = /[\\\r\n\t`]|\p{C}|\$\{/gu;
 const RE_KEY = /^(?:\p{L}|_)(?:\p{L}|_|\d)*$/u;
+const RE_ENDL = /[\r\n]+(?=[^\r\n])/g;
 const PADDER = '                ';
 const C_TAB = '\t'.charCodeAt(0);
 const C_CR = '\r'.charCodeAt(0);
@@ -247,7 +248,7 @@ class Serializer
 			else
 			{	const nextIndent = this.begin(false, 1, 'String', curIndent, index, key);
 				this.#key(true, nextIndent, 0, undefined);
-				this.result += value+'\n';
+				this.result += value.replace(RE_ENDL, m => m+nextIndent)+'\n';
 				this.end(false, 1, curIndent, index, key);
 				index = -1;
 			}
