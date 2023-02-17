@@ -40,9 +40,12 @@ console.log(objfmt(value, {indentStyle: IndentStyle.Horstmann}));
 function objfmt(value: unknown, options?: Options, indentAll: number|string='', copyKeysOrderFrom?: unknown): string;
 
 interface Options
-{	indentWidth?: number|string,
-	indentStyle?: IndentStyle,
-	preferLineWidthLimit?: number,
+{	indentWidth?: number|string;
+	indentStyle?: IndentStyle;
+	preferLineWidthLimit?: number;
+	stringAllowApos?: boolean;
+	stringAllowBacktick?: boolean;
+	longStringAsObject?: boolean;
 }
 
 const enum IndentStyle
@@ -59,5 +62,8 @@ Arguments:
 	- `indentWidth` - string (that consists of spaces and/or tabs) that will be used to indent each nesting level, or number of spaces (from `0` to `10`, -1 for TAB). Default: `4`.
 	- `indentStyle` - Style. Default: Kernighan & Ritchie.
 	- `preferLineWidthLimit` - When printing arrays, print several numbers on line if the line remains not longer than this number. Default: `160`.
+	- `stringAllowApos` - Quote string literals also with apostrophes, if it requires less escaping. Default: `false`.
+	- `stringAllowBacktick` - Quote string literals also with backticks, if it requires less escaping. Default: `false`.
+	- `longStringAsObject` - Print long strings as multiline `String {... text ...}`, instead of string literals. Default: `false`.
 - `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output, or number of spaces (from `0` to `10`, -1 for TAB). Default: empty string.
 - `copyKeysOrderFrom` - optional object or array, that will be traversed in parallel with the `value` object, to copy keys order from it. `copyKeysOrderFrom` can have some or all of the keys in `value`, and it can contain more keys. This allows to generate 2 stringified objects ready for line-to-line comparison.
