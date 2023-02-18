@@ -120,7 +120,7 @@ function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serial
 	}
 	if (typeof(value)=='object' && value!=null && !(value instanceof Date))
 	{	const isArray = Array.isArray(value) || (value as Any).buffer instanceof ArrayBuffer;
-		const entries = isArray ? value as unknown[]
+		const entries = isArray ? value as ArrayLike<unknown>
 			: serializer.includeNonEnumerable ? Object.getOwnPropertyNames(value)
 			: Object.keys(value);
 		const {length} = entries;
@@ -276,6 +276,9 @@ class Serializer
 		{	className += ' ';
 		}
 		// 1. Key and Value
+		if (value instanceof Date)
+		{	value = value.toISOString();
+		}
 		if (typeof(value) == 'bigint')
 		{	this.#key(true, curIndent, index, key);
 			this.#result += className + value + 'n';
@@ -307,7 +310,7 @@ class Serializer
 		}
 	}
 
-	arrayOfLimitedFields(entries: unknown[], fieldWidth: number, curIndent: string, curIndentWidth: number)
+	arrayOfLimitedFields(entries: ArrayLike<unknown>, fieldWidth: number, curIndent: string, curIndentWidth: number)
 	{	let nFieldsOnLine = 1;
 		while (curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.#preferLineWidthLimit)
 		{	nFieldsOnLine *= 2;
@@ -420,23 +423,26 @@ function autoSelectQuoteChar(str: string, stringAllowApos: boolean, stringAllowB
 
 function substCharsInString(str: string)
 {	const c = str.charCodeAt(0);
-	if (c == C_CR)
-	{	return '\\r';
-	}
-	else if (c == C_LF)
-	{	return '\\n';
-	}
-	else if (c == C_TAB)
-	{	return '\\t';
-	}
-	else if (c==C_BACKSLASH || c==C_QUOT || c==C_APOS || c==C_BACKTICK || c==C_DOLLAR)
-	{	return '\\'+str;
-	}
-	else if (c<=0xFF && str.length==1)
-	{	return '\\x'+c.toString(16).toUpperCase().padStart(2, '0');
-	}
-	else
-	{	return Array.prototype.map.call(str, c => '\\u'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')).join('');
+	switch (c)
+	{	case C_CR:
+			return '\\r';
+		case C_LF:
+			return '\\n';
+		case C_TAB:
+			return '\\t';
+		case C_BACKSLASH:
+		case C_QUOT:
+		case C_APOS:
+		case C_BACKTICK:
+		case C_DOLLAR:
+			return '\\'+str;
+		default:
+			if (c<=0xFF && str.length==1)
+			{	return '\\x'+c.toString(16).toUpperCase().padStart(2, '0');
+			}
+			else
+			{	return Array.prototype.map.call(str, c => '\\u'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')).join('');
+			}
 	}
 }
 
