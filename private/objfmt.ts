@@ -27,10 +27,8 @@ export function objfmt(value: unknown, options?: Options, indentAll: number|stri
 {	if (typeof(indentAll) == 'number')
 	{	indentAll = indentAll>=0 && indentAll<=10 ? ' '.repeat(indentAll) : '\t';
 	}
-	const serializer = new Serializer(options);
-	const curIndentWidth = indentToWidth(indentAll);
-	const addIndentWidth = indentToWidth(options?.indentWidth ?? DEFAULT_INDENT_WIDTH);
-	objfmtWithSerializer(value, copyKeysOrderFrom, serializer, indentAll, curIndentWidth, addIndentWidth, -1, undefined);
+	const serializer = new Serializer(options, indentAll);
+	objfmtWithSerializer(value, copyKeysOrderFrom, serializer, indentAll, -1, undefined, false);
 	return serializer+'';
 }
 
@@ -95,7 +93,14 @@ export const enum IndentStyle
 	Horstmann,
 }
 
-function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serializer: Serializer, curIndent: string, curIndentWidth: number, addIndentWidth: number, index: number, key: string|undefined)
+const enum What
+{	ARRAY,
+	OBJECT,
+	MAP,
+	MAP_DOUBLE_SPACE,
+}
+
+function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serializer: Serializer, curIndent: string, index: number, key: unknown, trimStart: boolean)
 {	let className = '';
 	if (typeof(value)=='object' && value!=null)
 	{	// className
@@ -110,89 +115,97 @@ function objfmtWithSerializer(value: unknown, copyKeysOrderFrom: unknown, serial
 			{	value = value.toJSON(key ?? index);
 			}
 		}
-		// convert Map to Object
-		if (value instanceof Map)
-		{	value = Object.fromEntries(value.entries());
-		}
-		else if (value instanceof Set)
+		// convert Set to Array
+		if (value instanceof Set)
 		{	value = [...value.keys()];
 		}
 	}
 	if (typeof(value)=='object' && value!=null && !(value instanceof Date))
-	{	const isArray = Array.isArray(value) || (value as Any).buffer instanceof ArrayBuffer;
-		const entries = isArray ? value as ArrayLike<unknown>
-			: serializer.includeNonEnumerable ? Object.getOwnPropertyNames(value)
-			: Object.keys(value);
-		const {length} = entries;
-		const nextIndent = serializer.begin(isArray, length, className, curIndent, index, key);
-		const nextIndentWidth = curIndentWidth + addIndentWidth;
-		if (isArray)
-		{	const fieldWidth = arrayFieldWidth(value as ArrayLike<unknown>);
-			if (fieldWidth >= 0)
-			{	serializer.arrayOfLimitedFields(entries, fieldWidth, nextIndent, nextIndentWidth);
-			}
-			else if (Array.isArray(copyKeysOrderFrom))
-			{	for (let i=0; i<length; i++)
-				{	objfmtWithSerializer(entries[i], copyKeysOrderFrom[i], serializer, nextIndent, nextIndentWidth, addIndentWidth, i, undefined);
-				}
-			}
-			else
-			{	for (let i=0; i<length; i++)
-				{	objfmtWithSerializer(entries[i], undefined, serializer, nextIndent, nextIndentWidth, addIndentWidth, i, undefined);
-				}
-			}
+	{	let what = What.OBJECT;
+		let keys: string[] | Map<unknown, unknown> | undefined;
+		let length = 0;
+		if (Array.isArray(value) || (value as Any).buffer instanceof ArrayBuffer)
+		{	what = What.ARRAY;
+			length = (value as Any).length;
+		}
+		else if (value instanceof Map)
+		{	what = isMapDoubleSpace(value) ? What.MAP_DOUBLE_SPACE : What.MAP;
+			keys = value;
+			length = value.size;
+		}
+		else if (serializer.includeNonEnumerable)
+		{	keys = Object.getOwnPropertyNames(value);
+			length = keys.length;
 		}
 		else
-		{	let keys = entries as string[];
-			if (typeof(copyKeysOrderFrom)=='object' && copyKeysOrderFrom!=null)
-			{	const keys2 = [];
-				for (const k of serializer.includeNonEnumerable ? Object.getOwnPropertyNames(copyKeysOrderFrom) : Object.keys(copyKeysOrderFrom))
-				{	// deno-lint-ignore no-prototype-builtins
-					if (value.hasOwnProperty(k))
-					{	keys2[keys2.length] = k;
-					}
-				}
-				for (const k of keys)
-				{	// deno-lint-ignore no-prototype-builtins
-					if (!copyKeysOrderFrom.hasOwnProperty(k))
-					{	keys2[keys2.length] = k;
-					}
-				}
-				keys = keys2;
+		{	keys = Object.keys(value);
+			length = keys.length;
+		}
+		const nextIndent = serializer.begin(what, length, className, curIndent, index, key, trimStart);
+		if (what == What.ARRAY)
+		{	const values = value as ArrayLike<unknown>;
+			const fieldWidth = arrayFieldWidth(values);
+			if (fieldWidth >= 0)
+			{	serializer.arrayOfLimitedFields(values, fieldWidth, nextIndent);
+			}
+			else
+			{	const rightKeys: unknown[]|undefined = Array.isArray(copyKeysOrderFrom) ? copyKeysOrderFrom : undefined;
 				for (let i=0; i<length; i++)
-				{	const key = keys[i];
-					objfmtWithSerializer((value as Record<string, unknown>)[key], (copyKeysOrderFrom as Record<string, unknown>)[key], serializer, nextIndent, nextIndentWidth, addIndentWidth, i, key);
+				{	const item = values[i];
+					objfmtWithSerializer(item, rightKeys?.[i], serializer, nextIndent, i, undefined, false);
+				}
+			}
+		}
+		else if (keys)
+		{	if (typeof(copyKeysOrderFrom)=='object' && copyKeysOrderFrom!=null)
+			{	const keys2 = new Array<unknown>();
+				const it = copyKeysOrderFrom instanceof Map ? copyKeysOrderFrom.keys()
+					: serializer.includeNonEnumerable ? Object.getOwnPropertyNames(copyKeysOrderFrom)
+					: Object.keys(copyKeysOrderFrom);
+				for (const k of it)
+				{	// deno-lint-ignore no-prototype-builtins
+					if (keys instanceof Map ? keys.has(k) : keys.hasOwnProperty(k))
+					{	keys2[keys2.length] = k;
+					}
+				}
+				for (const k of keys instanceof Map ? keys.keys() : keys)
+				{	if (!keys2.includes(k))
+					{	keys2[keys2.length] = k;
+					}
+				}
+				for (let i=0; i<length; i++)
+				{	const key = keys2[i];
+					const leftValue = value instanceof Map ? value.get(key) : typeof(key)=='string' ? (value as Record<string, unknown>)[key] : undefined;
+					const rightValue = copyKeysOrderFrom instanceof Map ? copyKeysOrderFrom.get(key) : typeof(key)=='string' ? (copyKeysOrderFrom as Record<string, unknown>)[key] : undefined;
+					objfmtWithSerializer(leftValue, rightValue, serializer, nextIndent, i, key, false);
+				}
+			}
+			else if (keys instanceof Map)
+			{	let i = 0;
+				for (const [key, v] of keys)
+				{	objfmtWithSerializer(v, undefined, serializer, nextIndent, i++, key, false);
 				}
 			}
 			else
-			{	for (let i=0; i<length; i++)
-				{	const key = keys[i];
-					objfmtWithSerializer((value as Record<string, unknown>)[key], undefined, serializer, nextIndent, nextIndentWidth, addIndentWidth, i, key);
+			{	let i = 0;
+				for (const key of keys)
+				{	objfmtWithSerializer((value as Record<string, unknown>)[key], undefined, serializer, nextIndent, i++, key, false);
 				}
 			}
 		}
-		serializer.end(isArray, length, curIndent, index, key);
+		serializer.end(what, length, curIndent, index, key);
 	}
 	else
-	{	serializer.stringifyValue(value, curIndent, curIndentWidth, index, key, className);
+	{	serializer.stringifyValue(value, curIndent, index, key, className);
 	}
-}
-
-function padStart(value: unknown, fieldWidth: number)
-{	let str = value+'';
-	while (true)
-	{	const nPad = fieldWidth - str.length;
-		if (nPad <= 0)
-		{	break;
-		}
-		str = PADDER.slice(0, nPad) + str;
-	}
-	return str;
 }
 
 class Serializer
 {	includeNonEnumerable: boolean;
 	noCallToJSON: boolean | string[];
+
+	#curIndentWidth: number;
+	#addIndentWidth: number;
 	#addIndent: string;
 	#addIndentShort: string;
 	#indentStyle: IndentStyle;
@@ -200,12 +213,16 @@ class Serializer
 	#stringAllowApos: boolean;
 	#stringAllowBacktick: boolean;
 	#longStringAsObject: boolean;
+	#insideWhat = new Array<What>();
+	#insideWhatLen = 0;
 	#result = '';
 
-	constructor(options?: Options)
+	constructor(options: Options|undefined, indentAll: number|string)
 	{	const indentWidth = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
 		this.includeNonEnumerable = options?.includeNonEnumerable ?? false;
 		this.noCallToJSON = options?.noCallToJSON ?? false;
+		this.#curIndentWidth = indentToWidth(indentAll);
+		this.#addIndentWidth = indentToWidth(indentWidth);
 		this.#indentStyle = options?.indentStyle ?? IndentStyle.KR;
 		this.#preferLineWidthLimit = options?.preferLineWidthLimit ?? DEFAULT_PREFER_LINE_WIDTH_LIMIT;
 		this.#stringAllowApos = options?.stringAllowApos ?? false;
@@ -219,19 +236,19 @@ class Serializer
 	{	return this.#result;
 	}
 
-	begin(isArray: boolean, length: number, className: string, curIndent: string, index: number, key: string|undefined)
+	begin(what: What, length: number, className: string, curIndent: string, index: number, key: unknown, trimStart: boolean)
 	{	const wantClassName = className.length != 0;
 		if (length == 0)
-		{	this.#key(true, curIndent, index, key);
+		{	this.#key(true, curIndent, index, key, trimStart);
 			if (wantClassName)
-			{	this.#result += className+(isArray ? ' []' : ' {}');
+			{	this.#result += className+(what==What.ARRAY ? ' []' : ' {}');
 			}
 			else
-			{	this.#result += isArray ? '[]' : '{}';
+			{	this.#result += what==What.ARRAY ? '[]' : '{}';
 			}
 		}
 		else
-		{	this.#key(wantClassName, curIndent, index, key);
+		{	this.#key(wantClassName, curIndent, index, key, trimStart);
 			if (wantClassName)
 			{	this.#result += className;
 			}
@@ -241,37 +258,41 @@ class Serializer
 					if (wantNewLine)
 					{	this.#result += '\n'+curIndent;
 					}
-					this.#result += isArray ? '[' : '{';
+					this.#result += what==What.ARRAY ? '[' : '{';
 					this.#result += '\n'+curIndent;
 					break;
 				case IndentStyle.Horstmann:
 					if (wantNewLine)
 					{	this.#result += '\n'+curIndent;
 					}
-					this.#result += isArray ? '[' : '{';
+					this.#result += what==What.ARRAY ? '[' : '{';
 					break;
 				default:
 					if (wantNewLine)
 					{	this.#result += ' ';
 					}
-					this.#result += isArray ? '[' : '{';
+					this.#result += what==What.ARRAY ? '[' : '{';
 					this.#result += '\n'+curIndent;
 			}
 			curIndent += this.#addIndent;
 		}
+		this.#insideWhat[this.#insideWhatLen++] = what;
+		this.#curIndentWidth += this.#addIndentWidth;
 		return curIndent;
 	}
 
-	end(isArray: boolean, length: number, curIndent: string, index: number, _key: string|undefined)
+	end(what: What, length: number, curIndent: string, index: number, _key: unknown)
 	{	if (length != 0)
-		{	this.#result += isArray ? curIndent+']' : curIndent+'}';
+		{	this.#result += what==What.ARRAY ? curIndent+']' : curIndent+'}';
 		}
 		if (index != -1)
 		{	this.#result += ',\n';
 		}
+		this.#insideWhatLen--;
+		this.#curIndentWidth -= this.#addIndentWidth;
 	}
 
-	stringifyValue(value: unknown, curIndent: string, curIndentWidth: number, index: number, key: string|undefined, className: string)
+	stringifyValue(value: unknown, curIndent: string, index: number, key: unknown, className: string)
 	{	if (className)
 		{	className += ' ';
 		}
@@ -280,20 +301,20 @@ class Serializer
 		{	value = value.toISOString();
 		}
 		if (typeof(value) == 'bigint')
-		{	this.#key(true, curIndent, index, key);
+		{	this.#key(true, curIndent, index, key, false);
 			this.#result += className + value + 'n';
 		}
 		else if (typeof(value) == 'string')
 		{	const str = this.#toStringLiteral(value);
-			if (!this.#longStringAsObject || curIndentWidth+str.length+(!key ? 0 : key.length+3)<=this.#preferLineWidthLimit) // key.length + ': '.length + ','.length (here i ignore escape chars in `key`, and possible quote chars)
-			{	this.#key(true, curIndent, index, key);
+			if (!this.#longStringAsObject || this.#curIndentWidth+str.length+(typeof(key)!='string' ? 0 : key.length+3)<=this.#preferLineWidthLimit) // key.length + ': '.length + ','.length (here i ignore escape chars in `key`, and possible quote chars)
+			{	this.#key(true, curIndent, index, key, false);
 				this.#result += className + str;
 			}
 			else
-			{	const nextIndent = this.begin(false, 1, className+'String', curIndent, index, key);
-				this.#key(true, nextIndent, 0, undefined);
+			{	const nextIndent = this.begin(What.OBJECT, 1, className+'String', curIndent, index, key, false);
+				this.#key(true, nextIndent, 0, undefined, false);
 				this.#result += value.replace(RE_ENDL, m => m+nextIndent)+'\n';
-				this.end(false, 1, curIndent, index, key);
+				this.end(What.OBJECT, 1, curIndent, index, key);
 				index = -1;
 			}
 		}
@@ -301,7 +322,7 @@ class Serializer
 		{	if (typeof(value) == 'function')
 			{	value = 'Function';
 			}
-			this.#key(true, curIndent, index, key);
+			this.#key(true, curIndent, index, key, false);
 			this.#result += className + value;
 		}
 		// 2. Comma
@@ -310,13 +331,13 @@ class Serializer
 		}
 	}
 
-	arrayOfLimitedFields(entries: ArrayLike<unknown>, fieldWidth: number, curIndent: string, curIndentWidth: number)
+	arrayOfLimitedFields(entries: ArrayLike<unknown>, fieldWidth: number, curIndent: string)
 	{	let nFieldsOnLine = 1;
-		while (curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.#preferLineWidthLimit)
+		while (this.#curIndentWidth + (fieldWidth+1) + (fieldWidth+3) * (nFieldsOnLine*2-1) <= this.#preferLineWidthLimit)
 		{	nFieldsOnLine *= 2;
 		}
 		for (let i=0, iEnd=entries.length; i<iEnd; i++)
-		{	this.#key(true, curIndent, i, undefined);
+		{	this.#key(true, curIndent, i, undefined, false);
 			this.#result += padStart(entries[i++], fieldWidth);
 			this.#result += ',';
 			for (let j=1; j<nFieldsOnLine && i<iEnd; j++)
@@ -328,11 +349,19 @@ class Serializer
 		}
 	}
 
-	#key(withSpace: boolean, curIndent: string, index: number, key: string|undefined)
-	{	this.#result += index!=0 ? curIndent : this.#addIndentShort;
+	#key(withSpace: boolean, curIndent: string, index: number, key: unknown, trimStart: boolean)
+	{	const insideWhat = this.#insideWhat[this.#insideWhatLen - 1];
+		if (!trimStart)
+		{	this.#result += index==0 ? this.#addIndentShort : insideWhat!=What.MAP_DOUBLE_SPACE ? curIndent : '\n'+curIndent;
+		}
 		if (key != undefined)
-		{	this.#result += RE_KEY.test(key) ? key : this.#toStringLiteral(key);
-			this.#result += withSpace ? ': ' : ':';
+		{	if (typeof(key) == 'string')
+			{	this.#result += insideWhat<What.MAP && RE_KEY.test(key) ? key : this.#toStringLiteral(key);
+			}
+			else
+			{	objfmtWithSerializer(key, undefined, this, curIndent, -1, undefined, true);
+			}
+			this.#result += insideWhat>=What.MAP ? (withSpace ? ' => ' : ' =>') : (withSpace ? ': ' : ':');
 		}
 	}
 
@@ -341,6 +370,18 @@ class Serializer
 		const str = value.replace(qt=='"' ? RE_SUBST_CHARS_IN_STRING_QT : qt=="'" ? RE_SUBST_CHARS_IN_STRING_APOS : RE_SUBST_CHARS_IN_STRING_BACKTICK, substCharsInString);
 		return `${qt}${str}${qt}`;
 	}
+}
+
+function padStart(value: unknown, fieldWidth: number)
+{	let str = value+'';
+	while (true)
+	{	const nPad = fieldWidth - str.length;
+		if (nPad <= 0)
+		{	break;
+		}
+		str = PADDER.slice(0, nPad) + str;
+	}
+	return str;
 }
 
 function arrayFieldWidth(array: ArrayLike<unknown>)
@@ -455,4 +496,13 @@ function indentToWidth(indent: number|string)
 	{	nColumn += indent.charCodeAt(i)==C_TAB ? TAB_WIDTH - nColumn%TAB_WIDTH : 1;
 	}
 	return nColumn;
+}
+
+function isMapDoubleSpace(map: Map<unknown, unknown>)
+{	for (const key of map.keys())
+	{	if (typeof(key)=='object' && key!=null && !(key instanceof Date))
+		{	return true;
+		}
+	}
+	return false;
 }
