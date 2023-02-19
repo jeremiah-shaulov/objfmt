@@ -143,6 +143,6 @@ Arguments:
 	- `includeNonEnumerable` - Print also non-enumerable object properties (that appear as such in `Object.getOwnPropertyDescriptors()`). Default: `false`.
 	- `noCallToJSON` - By default, when serializing an object that has `toJSON()` method, the result of calling this method is serialized, instead of the object itself (as `JSON.stringify()` does). This setting allows to avoid calling `toJSON()` at all (if set to `true`), or for certain class names. Default: `false`.
 	- `isHtml` - Produce HTML-escaped result: `<` and `&` characters in string literals will be converted to `&lt;` and `&amp;`. Default: `false`.
-	- `style` - Allows to colorize the output by providing strings that must be inserted where various literals start and end. These can be HTML strings or terminal escape sequences.
+	- `style` - Allows to colorize the output by providing strings that must be inserted where various literals start and end. These can be HTML strings or terminal escape sequences. If producing HTML, don't forget to include `Options.isHtml` as well.
 - `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output, or number of spaces (from `0` to `10`, -1 for TAB). Default: empty string.
 - `copyKeysOrderFrom` - optional object or array, that will be traversed in parallel with the `value` object, to copy keys order from it. `copyKeysOrderFrom` can have some or all of the keys in `value`, and it can contain more keys. This allows to generate 2 stringified objects ready for line-to-line comparison.

@@ -91,6 +91,7 @@ export type Options =
 
 	/**	Allows to colorize the output by providing strings that must be inserted where various literals start and end.
 		These can be HTML strings or terminal escape sequences.
+		If producing HTML, don't forget to include `Options.isHtml` as well.
 	 **/
 	style?: Style;
 };
