@@ -11,10 +11,10 @@ It's different from `JSON.stringify()` in several ways:
 
 ```ts
 // To download and run this example:
-// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.6/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example1.ts~)' > /tmp/example1.ts
+// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.8/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example1.ts~)' > /tmp/example1.ts
 // deno run /tmp/example1.ts
 
-import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.6/mod.ts';
+import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.8/mod.ts';
 
 const value =
 [	{	name: 'Product 1',
@@ -48,10 +48,10 @@ console.log(objfmt(value, {indentStyle: IndentStyle.Horstmann}));
 
 ```ts
 // To download and run this example:
-// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.6/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example2.ts~)' > /tmp/example2.ts
+// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.8/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example2.ts~)' > /tmp/example2.ts
 // deno run /tmp/example2.ts
 
-import {objfmt, IndentStyle, Options} from 'https://deno.land/x/objfmt@v0.0.6/mod.ts';
+import {objfmt, IndentStyle, Options} from 'https://deno.land/x/objfmt@v0.0.8/mod.ts';
 import * as Colors from 'https://deno.land/std@0.177.0/fmt/colors.ts';
 
 const value =
