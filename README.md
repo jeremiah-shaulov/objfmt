@@ -27,7 +27,7 @@ const value =
 		price: 9.99,
 		colors: ['orange', 'purple'],
 		publishDate: new Date(2024, 2, 3),
-        isInStock: true,
+		isInStock: true,
 	},
 ];
 
