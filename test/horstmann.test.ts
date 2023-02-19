@@ -196,6 +196,28 @@ undefined
 +	{	123456
 +	},
 }
+
+---
+
+-{	set: new Set(['one', 'two']),
+-	map: new Map([['one', 1], ['two', 2]]),
+-	map2: new Map([[{key: 'one'}, 1], [{key: 'two'}, 2]]),
++{	set: Set
++	[	"one",
++		"two",
++	],
++	map: Map
++	{	"one" => 1,
++		"two" => 2,
++	},
++	map2: Map
++	{	{	key: "one",
++		} => 1,
++
++		{	key: "two",
++		} => 2,
++	},
+}
 `;
 
 Deno.test

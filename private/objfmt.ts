@@ -82,21 +82,6 @@ export type Options =
 	style?: Style;
 };
 
-export type Style =
-{	stringBegin?: string;
-	stringEnd?: string;
-	keyBegin?: string;
-	keyEnd?: string;
-	numberBegin?: string;
-	numberEnd?: string;
-	keywordBegin?: string;
-	keywordEnd?: string;
-	typeBegin?: string;
-	typeEnd?: string;
-	structureBegin?: string;
-	structureEnd?: string;
-};
-
 export const enum IndentStyle
 {	// Options:
 
@@ -112,6 +97,21 @@ export const enum IndentStyle
 	 **/
 	Horstmann,
 }
+
+export type Style =
+{	stringBegin?: string;
+	stringEnd?: string;
+	keyBegin?: string;
+	keyEnd?: string;
+	numberBegin?: string;
+	numberEnd?: string;
+	keywordBegin?: string;
+	keywordEnd?: string;
+	typeBegin?: string;
+	typeEnd?: string;
+	structureBegin?: string;
+	structureEnd?: string;
+};
 
 const enum What
 {	ARRAY,
@@ -377,12 +377,14 @@ class Serializer
 				index = -1;
 			}
 		}
+		else if (typeof(value) == 'function')
+		{	this.#key(true, curIndent, index, key, false);
+			this.#result += className;
+		}
 		else
-		{	if (typeof(value) == 'function')
-			{	value = '';
-			}
+		{	// assume: false, true, null or undefined
 			this.#key(true, curIndent, index, key, false);
-			this.#result += className + value;
+			this.#result += className + this.#keywordBegin + value + this.#keywordEnd;
 		}
 		// 2. Comma
 		if (index != -1)
