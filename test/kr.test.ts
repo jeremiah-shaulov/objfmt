@@ -209,7 +209,7 @@ undefined
 
 {
 -	str: "123456",
-+	str: String {
++	str: string {
 +		123456
 +	},
 }
@@ -238,27 +238,49 @@ undefined
 +		} => 2,
 +	},
 }
+
+--- preferLineWidthLimit=16, longStringAsObject=true
+
+{
+	"a&b": "a<b",
+-	c: "a&b a<b",
++	c: string {
++		a&b a<b
++	},
+}
+
+--- preferLineWidthLimit=18, longStringAsObject=true, isHtml=true
+
+{
+-	"a&b": "a<b",
++	"a&amp;b": "a&lt;b",
+-	c: "a&b a<b",
++	c: string {
++		a&amp;b a&lt;b
++	},
+}
 `;
 
 Deno.test
 (	'All',
 	() =>
 	{	for (const indentWidth of [-1, 0, 1, 3, 4, 8, 9, 10, 11])
-		{	for (let str of TESTS.split('---'))
+		{	for (const str of TESTS.split('---'))
 			{	const optionsStr = str.match(/^[^\r\n]*/)?.[0] ?? '';
-				str = str.slice(optionsStr.length);
+				const code = str.slice(optionsStr.length);
 
 				const options: Options = {indentWidth, indentStyle: IndentStyle.KR};
 				optionsStr.replace(/stringAllowApos=(\w+)/, (_, w) => (options.stringAllowApos = w=='true')+'');
 				optionsStr.replace(/stringAllowBacktick=(\w+)/, (_, w) => (options.stringAllowBacktick = w=='true')+'');
 				optionsStr.replace(/longStringAsObject=(\w+)/, (_, w) => (options.longStringAsObject = w=='true')+'');
+				optionsStr.replace(/isHtml=(\w+)/, (_, w) => (options.isHtml = w=='true')+'');
 				optionsStr.replace(/preferLineWidthLimit=(\d+)/, (_, d) => (options.preferLineWidthLimit = +d)+'');
 				if (options.preferLineWidthLimit!=DEFAULT_PREFER_LINE_WIDTH_LIMIT && indentWidth!=-1 && indentWidth!=4)
 				{	continue;
 				}
 
-				const testActual = str.replace(/\r?\n\+[^\r\n]*/g, '').replace(/[\r\n]\-/g, m => m[0]);
-				let testExpected = str.replace(/\r?\n\-[^\r\n]*/g, '').replace(/[\r\n]\+/g, m => m[0]);
+				const testActual = code.replace(/\r?\n\+[^\r\n]*/g, '').replace(/[\r\n]\-/g, m => m[0]);
+				let testExpected = code.replace(/\r?\n\-[^\r\n]*/g, '').replace(/[\r\n]\+/g, m => m[0]);
 
 				if (indentWidth>=0 && indentWidth<=10)
 				{	const addIndent = ' '.repeat(indentWidth);
@@ -266,7 +288,18 @@ Deno.test
 					testExpected = testExpected.replace(/\S\t/g, m => m[0]+addIndentSmall).replace(/\t/g, addIndent);
 				}
 
-				assertEquals(objfmt(eval('('+testActual+')'), options), testExpected.trim());
+				try
+				{	assertEquals(objfmt(eval('('+testActual+')'), options), testExpected.trim());
+				}
+				catch (e)
+				{	console.error(`Failed test: (indent width ${indentWidth})`);
+					console.error(str.trim());
+					console.error('------ Actual:');
+					console.error(objfmt(eval('('+testActual+')'), options));
+					console.error('------ Expected:');
+					console.error(testExpected.trim());
+					throw e;
+				}
 			}
 		}
 	}

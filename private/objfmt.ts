@@ -4,11 +4,17 @@ type Any = any;
 export const DEFAULT_PREFER_LINE_WIDTH_LIMIT = 160;
 const DEFAULT_INDENT_WIDTH = 4;
 const TAB_WIDTH = 4;
-const RE_SUBST_CHARS_IN_STRING_QT = /[\\\r\n\t"]|\p{C}/gu;
-const RE_SUBST_CHARS_IN_STRING_APOS = /[\\\r\n\t']|\p{C}/gu;
-const RE_SUBST_CHARS_IN_STRING_BACKTICK = /[\\\r\n\t`]|\p{C}|\$\{/gu;
+
+const RE_ESCAPE_STRING_QT = /[\\\r\n\t"]|\p{C}/gu;
+const RE_ESCAPE_STRING_QT_HTML = /[\\\r\n\t"<&]|\p{C}/gu;
+const RE_ESCAPE_STRING_APOS = /[\\\r\n\t']|\p{C}/gu;
+const RE_ESCAPE_STRING_APOS_HTML = /[\\\r\n\t'<&]|\p{C}/gu;
+const RE_ESCAPE_STRING_BACKTICK = /[\\\r\n\t`]|\p{C}|\$\{/gu;
+const RE_ESCAPE_STRING_BACKTICK_HTML = /[\\\r\n\t`<&]|\p{C}|\$\{/gu;
+const RE_ESCAPE_STRING_OBJECT = /[\r\n]+(?=[^\r\n])/g;
+const RE_ESCAPE_STRING_OBJECT_HTML = /[\r\n]+(?=[^\r\n])|[<&]/g;
 const RE_KEY = /^(?:\p{L}|_)(?:\p{L}|_|\d)*$/u;
-const RE_ENDL = /[\r\n]+(?=[^\r\n])/g;
+
 const PADDER = '                ';
 const C_TAB = '\t'.charCodeAt(0);
 const C_CR = '\r'.charCodeAt(0);
@@ -19,6 +25,8 @@ const C_APOS = "'".charCodeAt(0);
 const C_BACKTICK = '`'.charCodeAt(0);
 const C_DOLLAR = '$'.charCodeAt(0);
 const C_BRACE_OPEN = '{'.charCodeAt(0);
+const C_LT = '<'.charCodeAt(0);
+const C_AMP = '&'.charCodeAt(0);
 
 /**	Convert JavaScript value (object, array or other) to human-readable string similar to JSON with indentation.
 	Includes class names together with object literals, and converts `Date` objects to string representation.
@@ -60,7 +68,7 @@ export type Options =
 	 **/
 	stringAllowBacktick?: boolean;
 
-	/**	Print long strings as multiline `String {... text ...}`, instead of string literals.
+	/**	Print long strings as multiline `string {... text ...}`, instead of string literals.
 		Default: `false`.
 	 **/
 	longStringAsObject?: boolean;
@@ -75,6 +83,11 @@ export type Options =
 		Default: `false`.
 	 **/
 	noCallToJSON?: boolean | string[];
+
+	/**	Produce HTML-escaped result: `<` and `&` characters in string literals will be converted to `&lt;` and `&amp;`.
+		Default: `false`.
+	 **/
+	isHtml?: boolean;
 
 	/**	Allows to colorize the output by providing strings that must be inserted where various literals start and end.
 		These can be HTML strings or terminal escape sequences.
@@ -236,6 +249,7 @@ class Serializer
 	#stringAllowApos: boolean;
 	#stringAllowBacktick: boolean;
 	#longStringAsObject: boolean;
+	#isHtml: boolean;
 
 	#stringBegin: string;
 	#stringEnd: string;
@@ -269,6 +283,7 @@ class Serializer
 		this.#stringAllowApos = options?.stringAllowApos ?? false;
 		this.#stringAllowBacktick = options?.stringAllowBacktick ?? false;
 		this.#longStringAsObject = options?.longStringAsObject ?? false;
+		this.#isHtml = options?.isHtml ?? false;
 
 		this.#stringBegin = options?.style?.stringBegin ?? '';
 		this.#stringEnd = options?.style?.stringEnd ?? '';
@@ -370,9 +385,15 @@ class Serializer
 				this.#result += className + this.#stringBegin + str + this.#stringEnd;
 			}
 			else
-			{	const nextIndent = this.begin(What.OBJECT, 1, className+'String', curIndent, index, key, false);
+			{	const nextIndent = this.begin(What.OBJECT, 1, className+'string', curIndent, index, key, false);
 				this.#key(true, nextIndent, 0, undefined, false);
-				this.#result += this.#stringBegin + value.replace(RE_ENDL, m => m+nextIndent) + this.#stringEnd + '\n';
+				if (!this.#isHtml)
+				{	value = value.replace(RE_ESCAPE_STRING_OBJECT, m => m+nextIndent);
+				}
+				else
+				{	value = value.replace(RE_ESCAPE_STRING_OBJECT_HTML, m => m=='<' ? '&lt;' : m=='&' ? '&amp;' : m+nextIndent);
+				}
+				this.#result += this.#stringBegin + value + this.#stringEnd + '\n';
 				this.end(What.OBJECT, 1, curIndent, index, key);
 				index = -1;
 			}
@@ -444,7 +465,10 @@ class Serializer
 
 	#toStringLiteral(value: string)
 	{	const qt = autoSelectQuoteChar(value, this.#stringAllowApos, this.#stringAllowBacktick);
-		const str = value.replace(qt=='"' ? RE_SUBST_CHARS_IN_STRING_QT : qt=="'" ? RE_SUBST_CHARS_IN_STRING_APOS : RE_SUBST_CHARS_IN_STRING_BACKTICK, substCharsInString);
+		const re = qt=='"' ? (this.#isHtml ? RE_ESCAPE_STRING_QT_HTML : RE_ESCAPE_STRING_QT)
+			: qt=="'" ? (this.#isHtml ? RE_ESCAPE_STRING_APOS_HTML : RE_ESCAPE_STRING_APOS)
+			: (this.#isHtml ? RE_ESCAPE_STRING_BACKTICK_HTML : RE_ESCAPE_STRING_BACKTICK);
+		const str = value.replace(re, substCharsInString);
 		return `${qt}${str}${qt}`;
 	}
 }
@@ -564,14 +588,22 @@ function substCharsInString(str: string)
 		case C_BACKTICK:
 		case C_DOLLAR:
 			return '\\'+str;
+		case C_LT:
+			return '&lt;';
+		case C_AMP:
+			return '&amp;';
 		default:
 			if (c<=0xFF && str.length==1)
 			{	return '\\x'+c.toString(16).toUpperCase().padStart(2, '0');
 			}
 			else
-			{	return Array.prototype.map.call(str, c => '\\u'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')).join('');
+			{	return Array.prototype.map.call(str, escapeUnicode).join('');
 			}
 	}
+}
+
+function escapeUnicode(c: string)
+{	return '\\u'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
 }
 
 function indentToWidth(indent: number|string)

@@ -11,10 +11,10 @@ It's different from `JSON.stringify()` in several ways:
 
 ```ts
 // To download and run this example:
-// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.8/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example1.ts~)' > /tmp/example1.ts
+// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.9/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example1.ts~)' > /tmp/example1.ts
 // deno run /tmp/example1.ts
 
-import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.8/mod.ts';
+import {objfmt, IndentStyle} from 'https://deno.land/x/objfmt@v0.0.9/mod.ts';
 
 const value =
 [	{	name: 'Product 1',
@@ -48,10 +48,10 @@ console.log(objfmt(value, {indentStyle: IndentStyle.Horstmann}));
 
 ```ts
 // To download and run this example:
-// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.8/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example2.ts~)' > /tmp/example2.ts
+// curl 'https://raw.githubusercontent.com/jeremiah-shaulov/objfmt/v0.0.9/README.md' | perl -ne '$y=$1 if /^```(ts\\b)?/;  print $_ if $y&&$m;  $m=$y&&($m||m~^// deno .*?/example2.ts~)' > /tmp/example2.ts
 // deno run /tmp/example2.ts
 
-import {objfmt, IndentStyle, Options} from 'https://deno.land/x/objfmt@v0.0.8/mod.ts';
+import {objfmt, Options} from 'https://deno.land/x/objfmt@v0.0.9/mod.ts';
 import * as Colors from 'https://deno.land/std@0.177.0/fmt/colors.ts';
 
 const value =
@@ -104,6 +104,7 @@ type Options =
 	longStringAsObject?: boolean;
 	includeNonEnumerable?: boolean;
 	noCallToJSON?: boolean | string[];
+	isHtml?: boolean;
 	style?: Style;
 };
 
@@ -138,9 +139,10 @@ Arguments:
 	- `preferLineWidthLimit` - When printing arrays, print several numbers on line if the line remains not longer than this number. Default: `160`.
 	- `stringAllowApos` - Quote string literals also with apostrophes, if it requires less escaping. Default: `false`.
 	- `stringAllowBacktick` - Quote string literals also with backticks, if it requires less escaping. Default: `false`.
-	- `longStringAsObject` - Print long strings as multiline `String {... text ...}`, instead of string literals. Default: `false`.
+	- `longStringAsObject` - Print long strings as multiline `string {... text ...}`, instead of string literals. Default: `false`.
 	- `includeNonEnumerable` - Print also non-enumerable object properties (that appear as such in `Object.getOwnPropertyDescriptors()`). Default: `false`.
 	- `noCallToJSON` - By default, when serializing an object that has `toJSON()` method, the result of calling this method is serialized, instead of the object itself (as `JSON.stringify()` does). This setting allows to avoid calling `toJSON()` at all (if set to `true`), or for certain class names. Default: `false`.
+	- `isHtml` - Produce HTML-escaped result: `<` and `&` characters in string literals will be converted to `&lt;` and `&amp;`. Default: `false`.
 	- `style` - Allows to colorize the output by providing strings that must be inserted where various literals start and end. These can be HTML strings or terminal escape sequences.
 - `indentAll` - string (that consists of spaces and/or tabs) that will be used to indent the whole output, or number of spaces (from `0` to `10`, -1 for TAB). Default: empty string.
 - `copyKeysOrderFrom` - optional object or array, that will be traversed in parallel with the `value` object, to copy keys order from it. `copyKeysOrderFrom` can have some or all of the keys in `value`, and it can contain more keys. This allows to generate 2 stringified objects ready for line-to-line comparison.
